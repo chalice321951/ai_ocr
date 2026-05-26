@@ -11,8 +11,8 @@ import cv2
 from src.config import Config
 from src.ocr_system import OCRSystem
 from src.result_formatter import ResultFormatter
-from src.subway_processor import SubwayProcessor
 from src.logger import setup_logger
+from src.output_manager import OutputManager
 
 # 设置日志
 logger = setup_logger("Main", log_level="INFO")
@@ -82,65 +82,38 @@ def process_image(ocr: OCRSystem, config: Config):
 
     if not os.path.exists(image_path):
         logger.error(f"图片文件不存在: {image_path}")
-        logger.info(f"请检查配置文件中的 input.image_path 设置")
         return
 
-    # 执行OCR
     result = ocr.process_image(image_path)
 
-    # 打印所有识别结果
-    print("\n" + "=" * 60)
-    print("全部识别结果:")
-    print("=" * 60)
-    print(f"处理时间: {result.processing_time:.2f}秒")
-    print(f"识别文字数: {len(result.results)}\n")
-
+    # 打印识别结果
+    print(f"\n识别到 {len(result.results)} 条文字 ({result.processing_time:.2f}秒):")
     for i, r in enumerate(result.results, 1):
-        print(f"{i}. {r.text} (置信度: {r.confidence:.2f})")
+        print(f"  {i}. {r.text} ({r.confidence:.2f})")
 
-    print("=" * 60)
-
-    # 过滤站点信息（当前站/下一站）
-    print("\n" + "=" * 60)
-    print("站点信息过滤结果:")
-    print("=" * 60)
-
-    subway_processor = SubwayProcessor()
-    station_info = subway_processor.filter_station_info(result.results)
-
-    if station_info:
-        for info in station_info:
-            print(f"[{info['type']}] {info['station_name']} (置信度: {info['confidence']:.2f})")
-    else:
-        print("未找到 '当前站：XXX' 或 '下一站：XXX' 格式的内容")
-
-    print("=" * 60)
-
-    # 保存结果
+    # 保存结果到 res 目录
     if config.save_result:
-        output_file = f"result.{config.output_format}"
-        formatted = ResultFormatter.format_ocr_result(result, config.output_format)
-        with open(output_file, 'w', encoding='utf-8') as f:
-            f.write(formatted)
-        logger.info(f"结果已保存到: {output_file}")
+        output_mgr = OutputManager()
+        detect_type = "roi_detect" if config.roi_enabled else "full_detect"
+        session_dir = output_mgr.start_session(detect_type)
 
-        # 保存过滤后的站点信息
+        # 保存 JSON 结果
         import json
-        station_output_file = "station_info.json"
-        with open(station_output_file, 'w', encoding='utf-8') as f:
-            json.dump(station_info, f, ensure_ascii=False, indent=2, default=str)
-        logger.info(f"站点信息已保存到: {station_output_file}")
+        json_path = os.path.join(session_dir, "ocr_result.json")
+        with open(json_path, 'w', encoding='utf-8') as f:
+            json.dump(result.to_dict(), f, ensure_ascii=False, indent=2)
+        logger.info(f"结果已保存: {json_path}")
 
-    # 可视化
-    if config.visualize:
-        try:
-            image = cv2.imread(image_path)
-            vis_image = ResultFormatter.visualize(image, result.results)
-            vis_output = "result_vis.jpg"
-            cv2.imwrite(vis_output, vis_image)
-            logger.info(f"可视化结果已保存到: {vis_output}")
-        except Exception as e:
-            logger.warning(f"可视化失败: {e}")
+        # 可视化
+        if config.visualize:
+            try:
+                image = cv2.imread(image_path)
+                vis_image = ResultFormatter.visualize(image, result.results)
+                vis_path = os.path.join(session_dir, "annotated.jpg")
+                cv2.imwrite(vis_path, vis_image)
+                logger.info(f"可视化已保存: {vis_path}")
+            except Exception as e:
+                logger.warning(f"可视化失败: {e}")
 
 
 def process_video(ocr: OCRSystem, config: Config):

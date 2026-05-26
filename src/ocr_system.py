@@ -157,9 +157,14 @@ class OCRSystem:
         roi_image = self.image_cropper.crop(image, roi)
 
         # OCR 识别
+        roi_x, roi_y = roi[0], roi[1]
         bboxes = self.text_detector.detect(roi_image)
         if bboxes:
             results = self.text_recognizer.recognize(roi_image, bboxes)
+            # 将 ROI 内的坐标偏移回原图坐标
+            for r in results:
+                r.bbox.x += roi_x
+                r.bbox.y += roi_y
             filtered_results = [r for r in results if r.confidence >= self.config.confidence_threshold]
         else:
             filtered_results = []
@@ -170,15 +175,17 @@ class OCRSystem:
         if self.config.save_result:
             self.output_manager.start_session("roi_detect")
 
-            # 可视化
             if self.config.visualize:
                 annotated = image.copy()
                 x, y, w, h = roi
                 cv2.rectangle(annotated, (x, y), (x + w, y + h), (0, 255, 0), 2)
-                cv2.putText(annotated, "ROI", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+                for r in filtered_results:
+                    bx, by, bw, bh = r.bbox.x, r.bbox.y, r.bbox.width, r.bbox.height
+                    cv2.rectangle(annotated, (bx, by), (bx + bw, by + bh), (0, 0, 255), 2)
+                    cv2.putText(annotated, r.text, (bx, by - 5),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
                 self.output_manager.save_annotated_image(annotated, "annotated.jpg")
 
-            # 保存 OCR 结果
             self.output_manager.save_ocr_result({
                 "image_path": image_path,
                 "roi": {"x": roi[0], "y": roi[1], "w": roi[2], "h": roi[3]},
@@ -186,7 +193,6 @@ class OCRSystem:
                 "processing_time": processing_time,
             })
 
-            # 保存 ROI 裁剪图
             if self.config.save_roi_crop:
                 self.output_manager.save_roi_crop(roi_image, "roi_0001.jpg")
 
@@ -317,9 +323,13 @@ class OCRSystem:
 
         roi_image = self.image_cropper.crop(frame, roi)
 
+        roi_x, roi_y = roi[0], roi[1]
         bboxes = self.text_detector.detect(roi_image)
         if bboxes:
             results = self.text_recognizer.recognize(roi_image, bboxes)
+            for r in results:
+                r.bbox.x += roi_x
+                r.bbox.y += roi_y
             filtered_results = [r for r in results if r.confidence >= self.config.confidence_threshold]
         else:
             filtered_results = []
@@ -330,8 +340,11 @@ class OCRSystem:
                 annotated = frame.copy()
                 x, y, w, h = roi
                 cv2.rectangle(annotated, (x, y), (x + w, y + h), (0, 255, 0), 2)
-                cv2.putText(annotated, f"ROI #{frame_count}", (x, y - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+                for r in filtered_results:
+                    bx, by, bw, bh = r.bbox.x, r.bbox.y, r.bbox.width, r.bbox.height
+                    cv2.rectangle(annotated, (bx, by), (bx + bw, by + bh), (0, 0, 255), 2)
+                    cv2.putText(annotated, r.text, (bx, by - 5),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
                 self.output_manager.save_annotated_image(annotated, f"annotated_{frame_count:04d}.jpg")
 
             if self.config.save_roi_crop:
