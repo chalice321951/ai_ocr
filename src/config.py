@@ -40,9 +40,20 @@ class Config:
         self.stream_frame_interval = 30  # 数据流帧间隔
         self.max_frames = 100  # 最大处理帧数
         
+        # ROI 配置
+        self.roi_enabled = False
+        self.roi_hsv_lower = (0, 120, 100)
+        self.roi_hsv_upper = (10, 255, 255)
+        self.roi_min_area = 1000
+        self.roi_dilate_kernel_size = 5
+        self.roi_padding = 10
+        self.roi_tracker_type = "CSRT"
+        self.roi_redetect_interval = 30
+
         # 输出配置
         self.save_result = True
         self.visualize = True
+        self.save_roi_crop = True
         
         # 如果提供了配置文件路径，则加载配置
         if config_path:
@@ -114,6 +125,25 @@ class Config:
             output_config = config_data['output']
             self.save_result = output_config.get('save_result', self.save_result)
             self.visualize = output_config.get('visualize', self.visualize)
+            self.save_roi_crop = output_config.get('save_roi_crop', self.save_roi_crop)
+
+        # 加载 ROI 配置
+        if 'roi' in config_data:
+            roi_config = config_data['roi']
+            self.roi_enabled = roi_config.get('enabled', self.roi_enabled)
+            if 'color_detect' in roi_config:
+                cd = roi_config['color_detect']
+                lower = cd.get('hsv_lower', list(self.roi_hsv_lower))
+                upper = cd.get('hsv_upper', list(self.roi_hsv_upper))
+                self.roi_hsv_lower = tuple(lower)
+                self.roi_hsv_upper = tuple(upper)
+                self.roi_min_area = cd.get('min_area', self.roi_min_area)
+                self.roi_dilate_kernel_size = cd.get('dilate_kernel_size', self.roi_dilate_kernel_size)
+                self.roi_padding = cd.get('padding', self.roi_padding)
+            if 'tracker' in roi_config:
+                tr = roi_config['tracker']
+                self.roi_tracker_type = tr.get('type', self.roi_tracker_type)
+                self.roi_redetect_interval = tr.get('redetect_interval', self.roi_redetect_interval)
         
         # 验证配置
         self._validate()
@@ -201,4 +231,10 @@ class Config:
             'batch_size': self.batch_size,
             'max_image_width': self.max_image_width,
             'max_image_height': self.max_image_height,
+            'roi_enabled': self.roi_enabled,
+            'roi_hsv_lower': self.roi_hsv_lower,
+            'roi_hsv_upper': self.roi_hsv_upper,
+            'roi_tracker_type': self.roi_tracker_type,
+            'roi_redetect_interval': self.roi_redetect_interval,
+            'save_roi_crop': self.save_roi_crop,
         }

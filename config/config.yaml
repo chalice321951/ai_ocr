@@ -61,3 +61,21 @@ input:
 output:
   save_result: true  # 是否保存结果到文件
   visualize: true  # 是否生成可视化图片（在原图上标注）
+  save_roi_crop: true  # 是否保存 ROI 裁剪图
+
+# ==================== ROI 检测配置 ====================
+roi:
+  enabled: false  # 是否启用 ROI 模式
+
+  # 颜色检测参数
+  color_detect:
+    hsv_lower: [0, 120, 100]  # HSV 下限 [H, S, V]
+    hsv_upper: [10, 255, 255]  # HSV 上限 [H, S, V]
+    min_area: 1000  # 最小轮廓面积
+    dilate_kernel_size: 5  # 膨胀核大小
+    padding: 10  # ROI 外扩像素
+
+  # 跟踪器参数
+  tracker:
+    type: "CSRT"  # 跟踪器类型: CSRT, KCF
+    redetect_interval: 30  # 每 N 帧重新颜色检测
