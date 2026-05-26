@@ -21,9 +21,9 @@ logger = setup_logger("Main", log_level="INFO")
 def main():
     """主函数 - 从配置文件读取所有配置"""
     
-    logger.info("=" * 60)
+    logger.info("=" * 50)
     logger.info("OCR文字识别系统启动")
-    logger.info("=" * 60)
+    logger.info("=" * 50)
     
     try:
         # 加载配置文件
@@ -34,17 +34,11 @@ def main():
             logger.info("请确保 config/config.yaml 文件存在")
             return
         
-        logger.info(f"加载配置文件: {config_path}")
+        logger.info(f"加载配置: {config_path}")
         config = Config(config_path)
-        
-        # 显示当前配置
-        logger.info(f"输入模式: {config.input_mode}")
-        logger.info(f"使用GPU: {config.use_gpu}")
-        logger.info(f"语言模式: {config.rec_lang}")
-        logger.info(f"置信度阈值: {config.confidence_threshold}")
-        
-        # 初始化OCR系统
-        logger.info("初始化OCR系统...")
+
+        logger.info(f"模式={config.input_mode}  GPU={config.use_gpu}  语言={config.rec_lang}")
+
         ocr = OCRSystem(config)
         
         # 根据配置的模式执行
@@ -72,27 +66,19 @@ def main():
         sys.exit(0)
         
     except Exception as e:
-        logger.error("=" * 60)
-        logger.error("程序发生错误:")
-        logger.error(f"错误类型: {type(e).__name__}")
-        logger.error(f"错误信息: {str(e)}")
-        logger.error("=" * 60)
-        logger.error("详细堆栈信息:")
-        logger.error(traceback.format_exc())
-        logger.error("=" * 60)
+        logger.error(f"程序出错: {type(e).__name__}: {e}")
+        logger.debug(traceback.format_exc())
         sys.exit(1)
         
     finally:
-        logger.info("=" * 60)
         logger.info("OCR文字识别系统退出")
-        logger.info("=" * 60)
 
 
 def process_image(ocr: OCRSystem, config: Config):
     """处理单张图片"""
     image_path = config.image_path
 
-    logger.info(f"处理图片: {image_path}")
+    logger.info(f"处理: {image_path}")
 
     if not os.path.exists(image_path):
         logger.error(f"图片文件不存在: {image_path}")

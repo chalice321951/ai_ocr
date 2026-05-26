@@ -39,9 +39,7 @@ class OCRSystem:
             log_level=self.config.log_level
         )
         
-        self.logger.info("=" * 50)
         self.logger.info("初始化OCR系统")
-        self.logger.info(f"配置: {self.config.to_dict()}")
         
         # 初始化输入处理器
         self.image_loader = ImageLoader()
@@ -84,7 +82,6 @@ class OCRSystem:
             self.logger.info("ROI 模式已启用")
 
         self.logger.info("OCR系统初始化完成")
-        self.logger.info("=" * 50)
     
     def process_image(self, image_path: str) -> OCRResult:
         """
