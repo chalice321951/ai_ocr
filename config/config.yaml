@@ -1,0 +1,63 @@
+# OCR系统配置文件
+
+# 文本检测配置
+detection:
+  model_type: "DB"  # 可选: EAST, DB, CRAFT, PSENet
+  use_angle_cls: true  # 是否使用方向分类器
+  
+# 文本识别配置
+recognition:
+  lang: "ch"  # 语言：ch（中文）, en（英文）, ch_en（中英文混合）
+  
+# 系统配置
+system:
+  use_gpu: true  # 是否使用GPU
+  gpu_mem: 500  # GPU内存限制（MB）
+  confidence_threshold: 0.5  # 置信度阈值
+  output_format: "json"  # 输出格式: json, xml, csv
+  
+# 日志配置
+logging:
+  level: "INFO"  # 日志级别: DEBUG, INFO, WARNING, ERROR
+  log_file: "logs/ocr_system.log"  # 日志文件路径
+  
+# 性能配置
+performance:
+  batch_size: 8  # 批处理大小
+  max_image_width: 1920  # 最大图像宽度
+  max_image_height: 1080  # 最大图像高度
+
+# ==================== 输入输出配置 ====================
+# 这是main.py使用的配置，修改这里即可改变程序行为
+
+# 输入配置
+input:
+  mode: "image"  # 模式: image(单张图片), video(视频), batch(批量处理), stream(数据流)
+  
+  # 单张图片模式配置
+  image_path: "test_image.jpg"  # 图片路径
+  
+  # 视频模式配置
+  video_path: "test_video.mp4"  # 视频路径
+  frame_interval: 30  # 帧间隔（每隔多少帧处理一次）
+  
+  # 批量处理模式配置
+  batch_paths:  # 图片路径列表
+    - "image1.jpg"
+    - "image2.jpg"
+    - "image3.jpg"
+  
+  # 数据流模式配置
+  stream_source: "0"  # 数据流源
+  # 可选值：
+  #   - "0" 或 0 = 摄像头0（默认摄像头）
+  #   - "1" 或 1 = 摄像头1
+  #   - "rtsp://username:password@ip:port/stream" = RTSP流
+  #   - "rtmp://server/live/stream" = RTMP流
+  stream_frame_interval: 30  # 帧间隔（每隔多少帧处理一次）
+  max_frames: null  # 最大处理帧数（null表示无限制）
+
+# 输出配置
+output:
+  save_result: true  # 是否保存结果到文件
+  visualize: true  # 是否生成可视化图片（在原图上标注）
