@@ -5,6 +5,7 @@ OCR文字识别系统 - 主程序
 """
 import sys
 import os
+import re
 import traceback
 import cv2
 
@@ -74,6 +75,70 @@ def main():
         logger.info("OCR文字识别系统退出")
 
 
+def is_chinese(text):
+    """判断文本是否包含中文字符"""
+    for ch in text:
+        if '一' <= ch <= '鿿':
+            return True
+    return False
+
+
+# 已知的站点前缀（允许 OCR 识别不完全准确）
+KNOWN_PREFIXES = ["当前站", "下一站", "本站", "上一站"]
+
+
+def normalize_station_text(text):
+    """
+    模糊匹配站点前缀并规范化。
+    比如 "当前" → "当前站"，"当站" → "当前站"，"下一" → "下一站"
+    """
+    for prefix in KNOWN_PREFIXES:
+        # 如果文本包含已知前缀，直接返回
+        if text.startswith(prefix):
+            return prefix
+
+    # 模糊匹配：检查文本是否和某个前缀足够相似
+    best_match = None
+    best_ratio = 0.0
+    for prefix in KNOWN_PREFIXES:
+        # 检查文本是否是前缀的子串
+        if len(text) >= 2 and text in prefix:
+            return prefix
+        # 检查前缀是否包含文本的关键字
+        if len(text) >= 2 and prefix[:len(text)] == text:
+            return prefix
+
+    return None
+
+
+def parse_station_info(combined_text):
+    """
+    从拼接后的中文文本中解析站点信息。
+    返回规范化后的文本，如 "当前站：大堰河街"
+    """
+    # 尝试匹配 "X站：站名" 或 "X站 站名" 模式
+    for prefix in KNOWN_PREFIXES:
+        # 匹配 "当前站：大堰河街" 或 "当前站 大堰河街"
+        pattern = re.escape(prefix) + r'[：:\s]*(.+)$'
+        match = re.search(pattern, combined_text)
+        if match:
+            station_name = match.group(1).strip()
+            return f"{prefix}：{station_name}"
+
+    # 未匹配到已知前缀，尝试模糊匹配
+    for prefix in KNOWN_PREFIXES:
+        for i in range(len(combined_text)):
+            for j in range(i + 2, min(i + len(prefix) + 1, len(combined_text) + 1)):
+                candidate = combined_text[i:j]
+                if candidate in prefix or prefix.startswith(candidate):
+                    # 找到了前缀的一部分，检查后面是否有站名
+                    rest = combined_text[j:].strip()
+                    if rest:
+                        return f"{prefix}：{rest}"
+
+    return combined_text
+
+
 def process_image(ocr: OCRSystem, config: Config):
     """处理单张图片"""
     image_path = config.image_path
@@ -86,10 +151,18 @@ def process_image(ocr: OCRSystem, config: Config):
 
     result = ocr.process_image(image_path)
 
-    # 打印识别结果
-    print(f"\n识别到 {len(result.results)} 条文字 ({result.processing_time:.2f}秒):")
-    for i, r in enumerate(result.results, 1):
-        print(f"  {i}. {r.text} ({r.confidence:.2f})")
+    # 过滤掉纯英文结果，只保留含中文的文字，按 x 坐标从左到右排序
+    chinese_results = [r for r in result.results if is_chinese(r.text)]
+    chinese_results.sort(key=lambda r: r.bbox.x)
+
+    # 按位置顺序拼接中文文字
+    combined_text = "".join(r.text for r in chinese_results)
+
+    # 规范化站点信息
+    station_text = parse_station_info(combined_text)
+
+    print(f"\n识别结果 ({result.processing_time:.2f}秒):")
+    print(f"  {station_text}")
 
     # 保存结果到 res 目录
     if config.save_result:
@@ -97,18 +170,21 @@ def process_image(ocr: OCRSystem, config: Config):
         detect_type = "roi_detect" if config.roi_enabled else "full_detect"
         session_dir = output_mgr.start_session(detect_type)
 
-        # 保存 JSON 结果
         import json
+        json_data = {
+            "text": station_text,
+            "results": [r.to_dict() for r in result.results],
+            "processing_time": result.processing_time,
+        }
         json_path = os.path.join(session_dir, "ocr_result.json")
         with open(json_path, 'w', encoding='utf-8') as f:
-            json.dump(result.to_dict(), f, ensure_ascii=False, indent=2)
+            json.dump(json_data, f, ensure_ascii=False, indent=2)
         logger.info(f"结果已保存: {json_path}")
 
-        # 可视化
         if config.visualize:
             try:
                 image = cv2.imread(image_path)
-                vis_image = ResultFormatter.visualize(image, result.results)
+                vis_image = ResultFormatter.visualize(image, chinese_results)
                 vis_path = os.path.join(session_dir, "annotated.jpg")
                 cv2.imwrite(vis_path, vis_image)
                 logger.info(f"可视化已保存: {vis_path}")

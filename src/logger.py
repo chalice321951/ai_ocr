@@ -23,14 +23,15 @@ def setup_logger(
         logging.Logger: 配置好的日志记录器
     """
     # 压制 PaddleOCR / PaddlePaddle 的冗余日志
-    logging.getLogger("ppocr").setLevel(logging.WARNING)
-    logging.getLogger("paddle").setLevel(logging.WARNING)
-    logging.getLogger("ppstructure").setLevel(logging.WARNING)
+    logging.getLogger("ppocr").setLevel(logging.ERROR)
+    logging.getLogger("paddle").setLevel(logging.ERROR)
+    logging.getLogger("ppstructure").setLevel(logging.ERROR)
 
     logger = logging.getLogger(name)
 
     level = getattr(logging, log_level.upper(), logging.INFO)
     logger.setLevel(level)
+    logger.propagate = False
 
     if logger.handlers:
         return logger
