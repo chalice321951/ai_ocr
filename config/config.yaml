@@ -77,5 +77,5 @@ roi:
 
   # 跟踪器参数
   tracker:
-    type: "CSRT"  # 跟踪器类型: CSRT, KCF
+    type: "MIL"  # 跟踪器类型: MIL（内置，无需模型文件）
     redetect_interval: 30  # 每 N 帧重新颜色检测

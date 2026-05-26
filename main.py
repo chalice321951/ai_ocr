@@ -166,9 +166,16 @@ def process_image(ocr: OCRSystem, config: Config):
 
     # 保存结果到 res 目录
     if config.save_result:
+        from datetime import datetime
         output_mgr = OutputManager()
         detect_type = "roi_detect" if config.roi_enabled else "full_detect"
         session_dir = output_mgr.start_session(detect_type)
+
+        # 创建子文件夹：时间戳_检测结果
+        ts = datetime.now().strftime("%H%M%S")
+        safe_name = station_text.replace("：", "_").replace(":", "_").replace(" ", "_")
+        sub_dir = os.path.join(session_dir, f"{ts}_{safe_name}")
+        os.makedirs(sub_dir, exist_ok=True)
 
         import json
         json_data = {
@@ -176,7 +183,7 @@ def process_image(ocr: OCRSystem, config: Config):
             "results": [r.to_dict() for r in result.results],
             "processing_time": result.processing_time,
         }
-        json_path = os.path.join(session_dir, "ocr_result.json")
+        json_path = os.path.join(sub_dir, "ocr_result.json")
         with open(json_path, 'w', encoding='utf-8') as f:
             json.dump(json_data, f, ensure_ascii=False, indent=2)
         logger.info(f"结果已保存: {json_path}")
@@ -185,7 +192,7 @@ def process_image(ocr: OCRSystem, config: Config):
             try:
                 image = cv2.imread(image_path)
                 vis_image = ResultFormatter.visualize(image, chinese_results)
-                vis_path = os.path.join(session_dir, "annotated.jpg")
+                vis_path = os.path.join(sub_dir, "annotated.jpg")
                 cv2.imwrite(vis_path, vis_image)
                 logger.info(f"可视化已保存: {vis_path}")
             except Exception as e:

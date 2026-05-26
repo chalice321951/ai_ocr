@@ -34,12 +34,36 @@ class ROITracker:
 
     def _create_tracker(self):
         """创建 OpenCV 跟踪器"""
-        if self.tracker_type == "CSRT":
-            return cv2.TrackerCSRT_create()
-        elif self.tracker_type == "KCF":
-            return cv2.TrackerKCF_create()
-        else:
-            raise ValueError(f"不支持的跟踪器类型: {self.tracker_type}")
+        # 按优先级尝试不同 API
+        tracker_map = {
+            "CSRT": ["TrackerCSRT_create", "TrackerNano_create"],
+            "KCF":  ["TrackerKCF_create", "TrackerNano_create"],
+            "Nano": ["TrackerNano_create"],
+            "MIL":  ["TrackerMIL_create"],
+        }
+
+        candidates = tracker_map.get(self.tracker_type, ["TrackerNano_create"])
+
+        # 尝试 cv2 主模块
+        for method_name in candidates:
+            creator = getattr(cv2, method_name, None)
+            if creator is not None:
+                return creator()
+
+        # 尝试 cv2.legacy（OpenCV 4.5.1 ~ 4.8）
+        try:
+            from cv2 import legacy
+            for method_name in candidates:
+                creator = getattr(legacy, method_name, None)
+                if creator is not None:
+                    return creator()
+        except ImportError:
+            pass
+
+        raise ValueError(
+            f"当前 OpenCV ({cv2.__version__}) 不支持跟踪器 {self.tracker_type}，"
+            f"可用: {', '.join([x.replace('_create','') for x in candidates])}"
+        )
 
     def update(self, frame: np.ndarray) -> Optional[Tuple[int, int, int, int]]:
         """

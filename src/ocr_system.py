@@ -1,6 +1,7 @@
 """
 OCR系统主类 - 集成所有组件
 """
+import os
 import time
 import cv2
 import numpy as np
@@ -80,6 +81,9 @@ class OCRSystem:
                 redetect_interval=self.config.roi_redetect_interval,
             )
             self.logger.info("ROI 模式已启用")
+
+        # 变化检测状态（视频/流模式使用）
+        self._last_text = None
 
         self.logger.info("OCR系统初始化完成")
     
@@ -229,6 +233,7 @@ class OCRSystem:
         use_roi = self.config.roi_enabled and self.roi_tracker is not None
         if use_roi:
             self.roi_tracker.reset()
+            self._last_text = None
             if self.config.save_result:
                 self.output_manager.start_session("roi_detect")
 
@@ -281,6 +286,7 @@ class OCRSystem:
         use_roi = self.config.roi_enabled and self.roi_tracker is not None
         if use_roi:
             self.roi_tracker.reset()
+            self._last_text = None
             if self.config.save_result:
                 self.output_manager.start_session("roi_detect")
 
@@ -314,6 +320,35 @@ class OCRSystem:
 
         return OCRResult(results=filtered_results, processing_time=0, image_path=source_label)
 
+    @staticmethod
+    def _is_chinese(text):
+        for ch in text:
+            if '一' <= ch <= '鿿':
+                return True
+        return False
+
+    def _get_station_text(self, results):
+        """从识别结果中提取中文文本（按 x 坐标排序），并规范化站点前缀"""
+        import re
+        KNOWN_PREFIXES = ["当前站", "下一站", "本站", "上一站"]
+
+        chinese = [r for r in results if self._is_chinese(r.text)]
+        chinese.sort(key=lambda r: r.bbox.x)
+        combined = "".join(r.text for r in chinese)
+
+        # 规范化站点前缀
+        for prefix in KNOWN_PREFIXES:
+            pattern = re.escape(prefix) + r'[：:\s]*(.+)$'
+            match = re.search(pattern, combined)
+            if match:
+                return f"{prefix}：{match.group(1).strip()}"
+            if len(combined) >= 2 and combined in prefix:
+                return prefix
+            if len(combined) >= 2 and prefix.startswith(combined):
+                return prefix
+
+        return combined
+
     def _process_frame_roi(self, frame, frame_count, source_label):
         """ROI 模式处理单帧"""
         roi = self.roi_tracker.update(frame)
@@ -334,28 +369,47 @@ class OCRSystem:
         else:
             filtered_results = []
 
-        # 保存输出
-        if self.config.save_result:
+        # 提取规范化文本
+        station_text = self._get_station_text(filtered_results)
+
+        # 变化检测：文本没变则不保存
+        if self.config.save_result and station_text and station_text != self._last_text:
+            self._last_text = station_text
+
+            # 用时间戳+文本做子文件夹名
+            from datetime import datetime
+            ts = datetime.now().strftime("%H%M%S")
+            safe_name = station_text.replace("：", "_").replace(":", "_").replace(" ", "_")
+            sub_dir = os.path.join(self.output_manager.session_dir, f"{ts}_{safe_name}")
+            os.makedirs(sub_dir, exist_ok=True)
+
             if self.config.visualize:
                 annotated = frame.copy()
                 x, y, w, h = roi
                 cv2.rectangle(annotated, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                from PIL import Image, ImageDraw
+                from .result_formatter import get_chinese_font
+                pil_img = Image.fromarray(cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB))
+                draw = ImageDraw.Draw(pil_img)
+                font = get_chinese_font(20)
                 for r in filtered_results:
                     bx, by, bw, bh = r.bbox.x, r.bbox.y, r.bbox.width, r.bbox.height
-                    cv2.rectangle(annotated, (bx, by), (bx + bw, by + bh), (0, 0, 255), 2)
-                    cv2.putText(annotated, r.text, (bx, by - 5),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
-                self.output_manager.save_annotated_image(annotated, f"annotated_{frame_count:04d}.jpg")
+                    draw.rectangle([bx, by, bx + bw, by + bh], outline=(0, 0, 255), width=2)
+                    draw.text((bx, by - 22), r.text, fill=(0, 0, 255), font=font)
+                annotated = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+                cv2.imwrite(os.path.join(sub_dir, "annotated.jpg"), annotated)
 
-            if self.config.save_roi_crop:
-                self.output_manager.save_roi_crop(roi_image, f"roi_{frame_count:04d}.jpg")
+            import json
+            with open(os.path.join(sub_dir, "ocr_result.json"), 'w', encoding='utf-8') as f:
+                json.dump({
+                    "frame": frame_count,
+                    "source": source_label,
+                    "text": station_text,
+                    "roi": {"x": roi[0], "y": roi[1], "w": roi[2], "h": roi[3]},
+                    "results": [r.to_dict() for r in filtered_results],
+                }, f, ensure_ascii=False, indent=2)
 
-            self.output_manager.save_ocr_result({
-                "frame": frame_count,
-                "source": source_label,
-                "roi": {"x": roi[0], "y": roi[1], "w": roi[2], "h": roi[3]},
-                "results": [r.to_dict() for r in filtered_results],
-            })
+            self.logger.info(f"检测到变化: {station_text} (帧 {frame_count})")
 
         return OCRResult(results=filtered_results, processing_time=0, image_path=f"{source_label}#frame{frame_count}")
     
