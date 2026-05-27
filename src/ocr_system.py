@@ -15,9 +15,9 @@ from .text_recognizer import TextRecognizer
 from .accuracy_evaluator import AccuracyEvaluator
 from .logger import setup_logger, get_logger
 from .color_detector import ColorDetector, ColorDetectorConfig
-from .roi_tracker import ROITracker
 from .image_cropper import ImageCropper
 from .output_manager import OutputManager
+from .station_matcher import StationMatcher
 
 
 class OCRSystem:
@@ -62,7 +62,6 @@ class OCRSystem:
 
         # 初始化 ROI 相关组件
         self.color_detector = None
-        self.roi_tracker = None
         self.image_cropper = ImageCropper()
         self.output_manager = OutputManager()
 
@@ -71,19 +70,17 @@ class OCRSystem:
                 hsv_lower=self.config.roi_hsv_lower,
                 hsv_upper=self.config.roi_hsv_upper,
                 min_area=self.config.roi_min_area,
-                dilate_kernel_size=self.config.roi_dilate_kernel_size,
                 padding=self.config.roi_padding,
+                max_height_ratio=self.config.roi_max_height_ratio,
             )
             self.color_detector = ColorDetector(color_config)
-            self.roi_tracker = ROITracker(
-                color_detector=self.color_detector,
-                tracker_type=self.config.roi_tracker_type,
-                redetect_interval=self.config.roi_redetect_interval,
-            )
             self.logger.info("ROI 模式已启用")
 
+        # 初始化站点匹配器
+        self.station_matcher = StationMatcher(self.config.stations_file)
+
         # 变化检测状态（视频/流模式使用）
-        self._last_text = None
+        self._last_text = ""
 
         self.logger.info("OCR系统初始化完成")
     
@@ -160,18 +157,13 @@ class OCRSystem:
         # 裁剪 ROI
         roi_image = self.image_cropper.crop(image, roi)
 
-        # OCR 识别
+        # OCR 识别（直接对整个 ROI 做 OCR，不做预切割）
         roi_x, roi_y = roi[0], roi[1]
-        bboxes = self.text_detector.detect(roi_image)
-        if bboxes:
-            results = self.text_recognizer.recognize(roi_image, bboxes)
-            # 将 ROI 内的坐标偏移回原图坐标
-            for r in results:
-                r.bbox.x += roi_x
-                r.bbox.y += roi_y
-            filtered_results = [r for r in results if r.confidence >= self.config.confidence_threshold]
-        else:
-            filtered_results = []
+        results = self.text_recognizer.recognize_full(roi_image)
+        for r in results:
+            r.bbox.x += roi_x
+            r.bbox.y += roi_y
+        filtered_results = [r for r in results if r.confidence >= self.config.confidence_threshold]
 
         processing_time = time.time() - start_time
 
@@ -230,10 +222,9 @@ class OCRSystem:
         frame_count = 0
 
         # ROI 模式：初始化跟踪器
-        use_roi = self.config.roi_enabled and self.roi_tracker is not None
+        use_roi = self.config.roi_enabled and self.color_detector is not None
         if use_roi:
-            self.roi_tracker.reset()
-            self._last_text = None
+            self._last_text = ""
             if self.config.save_result:
                 self.output_manager.start_session("roi_detect")
 
@@ -283,10 +274,9 @@ class OCRSystem:
         """
         self.logger.info(f"开始处理数据流: {stream_source}, 帧间隔: {frame_interval}")
 
-        use_roi = self.config.roi_enabled and self.roi_tracker is not None
+        use_roi = self.config.roi_enabled and self.color_detector is not None
         if use_roi:
-            self.roi_tracker.reset()
-            self._last_text = None
+            self._last_text = ""
             if self.config.save_result:
                 self.output_manager.start_session("roi_detect")
 
@@ -350,8 +340,8 @@ class OCRSystem:
         return combined
 
     def _process_frame_roi(self, frame, frame_count, source_label):
-        """ROI 模式处理单帧"""
-        roi = self.roi_tracker.update(frame)
+        """ROI 模式处理单帧（每帧颜色检测，不用跟踪器）"""
+        roi = self.color_detector.detect(frame)
 
         if roi is None:
             return OCRResult(results=[], processing_time=0, image_path=f"{source_label}#frame{frame_count}")
@@ -359,20 +349,18 @@ class OCRSystem:
         roi_image = self.image_cropper.crop(frame, roi)
 
         roi_x, roi_y = roi[0], roi[1]
-        bboxes = self.text_detector.detect(roi_image)
-        if bboxes:
-            results = self.text_recognizer.recognize(roi_image, bboxes)
-            for r in results:
-                r.bbox.x += roi_x
-                r.bbox.y += roi_y
-            filtered_results = [r for r in results if r.confidence >= self.config.confidence_threshold]
-        else:
-            filtered_results = []
+        results = self.text_recognizer.recognize_full(roi_image)
+        for r in results:
+            r.bbox.x += roi_x
+            r.bbox.y += roi_y
+        filtered_results = [r for r in results if r.confidence >= self.config.confidence_threshold]
 
         # 提取规范化文本
         station_text = self._get_station_text(filtered_results)
+        # 用站点匹配器纠正
+        station_text = self.station_matcher.match(station_text) or ""
 
-        # 变化检测：文本没变则不保存
+        # 变化检测：文本没变或为空则不保存
         if self.config.save_result and station_text and station_text != self._last_text:
             self._last_text = station_text
 
@@ -399,6 +387,9 @@ class OCRSystem:
                 annotated = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
                 cv2.imwrite(os.path.join(sub_dir, "annotated.jpg"), annotated)
 
+            if self.config.save_roi_crop:
+                cv2.imwrite(os.path.join(sub_dir, "roi_crop.jpg"), roi_image)
+
             import json
             with open(os.path.join(sub_dir, "ocr_result.json"), 'w', encoding='utf-8') as f:
                 json.dump({
@@ -408,8 +399,6 @@ class OCRSystem:
                     "roi": {"x": roi[0], "y": roi[1], "w": roi[2], "h": roi[3]},
                     "results": [r.to_dict() for r in filtered_results],
                 }, f, ensure_ascii=False, indent=2)
-
-            self.logger.info(f"检测到变化: {station_text} (帧 {frame_count})")
 
         return OCRResult(results=filtered_results, processing_time=0, image_path=f"{source_label}#frame{frame_count}")
     

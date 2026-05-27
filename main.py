@@ -5,7 +5,6 @@ OCR文字识别系统 - 主程序
 """
 import sys
 import os
-import re
 import traceback
 import cv2
 
@@ -14,6 +13,7 @@ from src.ocr_system import OCRSystem
 from src.result_formatter import ResultFormatter
 from src.logger import setup_logger
 from src.output_manager import OutputManager
+from src.station_matcher import StationMatcher
 
 # 设置日志
 logger = setup_logger("Main", log_level="INFO")
@@ -83,62 +83,6 @@ def is_chinese(text):
     return False
 
 
-# 已知的站点前缀（允许 OCR 识别不完全准确）
-KNOWN_PREFIXES = ["当前站", "下一站", "本站", "上一站"]
-
-
-def normalize_station_text(text):
-    """
-    模糊匹配站点前缀并规范化。
-    比如 "当前" → "当前站"，"当站" → "当前站"，"下一" → "下一站"
-    """
-    for prefix in KNOWN_PREFIXES:
-        # 如果文本包含已知前缀，直接返回
-        if text.startswith(prefix):
-            return prefix
-
-    # 模糊匹配：检查文本是否和某个前缀足够相似
-    best_match = None
-    best_ratio = 0.0
-    for prefix in KNOWN_PREFIXES:
-        # 检查文本是否是前缀的子串
-        if len(text) >= 2 and text in prefix:
-            return prefix
-        # 检查前缀是否包含文本的关键字
-        if len(text) >= 2 and prefix[:len(text)] == text:
-            return prefix
-
-    return None
-
-
-def parse_station_info(combined_text):
-    """
-    从拼接后的中文文本中解析站点信息。
-    返回规范化后的文本，如 "当前站：大堰河街"
-    """
-    # 尝试匹配 "X站：站名" 或 "X站 站名" 模式
-    for prefix in KNOWN_PREFIXES:
-        # 匹配 "当前站：大堰河街" 或 "当前站 大堰河街"
-        pattern = re.escape(prefix) + r'[：:\s]*(.+)$'
-        match = re.search(pattern, combined_text)
-        if match:
-            station_name = match.group(1).strip()
-            return f"{prefix}：{station_name}"
-
-    # 未匹配到已知前缀，尝试模糊匹配
-    for prefix in KNOWN_PREFIXES:
-        for i in range(len(combined_text)):
-            for j in range(i + 2, min(i + len(prefix) + 1, len(combined_text) + 1)):
-                candidate = combined_text[i:j]
-                if candidate in prefix or prefix.startswith(candidate):
-                    # 找到了前缀的一部分，检查后面是否有站名
-                    rest = combined_text[j:].strip()
-                    if rest:
-                        return f"{prefix}：{rest}"
-
-    return combined_text
-
-
 def process_image(ocr: OCRSystem, config: Config):
     """处理单张图片"""
     image_path = config.image_path
@@ -158,8 +102,9 @@ def process_image(ocr: OCRSystem, config: Config):
     # 按位置顺序拼接中文文字
     combined_text = "".join(r.text for r in chinese_results)
 
-    # 规范化站点信息
-    station_text = parse_station_info(combined_text)
+    # 站点匹配
+    matcher = StationMatcher(config.stations_file)
+    station_text = matcher.match(combined_text) or combined_text
 
     print(f"\n识别结果 ({result.processing_time:.2f}秒):")
     print(f"  {station_text}")
@@ -203,73 +148,28 @@ def process_video(ocr: OCRSystem, config: Config):
     """处理视频"""
     video_path = config.video_path
     frame_interval = config.frame_interval
-    
-    logger.info(f"处理视频: {video_path}")
-    logger.info(f"帧间隔: {frame_interval}")
-    
+
+    logger.info(f"处理视频: {video_path}, 帧间隔: {frame_interval}")
+
     if not os.path.exists(video_path):
         logger.error(f"视频文件不存在: {video_path}")
-        logger.info(f"请检查配置文件中的 input.video_path 设置")
         return
-    
-    # 执行OCR
-    results = ocr.process_video(video_path, frame_interval)
-    
-    # 打印摘要
-    total_texts = sum(len(r.results) for r in results)
-    print("\n" + "=" * 60)
-    print("视频处理完成:")
-    print("=" * 60)
-    print(f"总帧数: {len(results)}")
-    print(f"识别文字总数: {total_texts}")
-    print("=" * 60)
-    
-    # 保存结果
-    if config.save_result:
-        import json
-        output_data = {
-            'video_path': video_path,
-            'frame_interval': frame_interval,
-            'total_frames': len(results),
-            'frames': [r.to_dict() for r in results]
-        }
-        with open('video_result.json', 'w', encoding='utf-8') as f:
-            json.dump(output_data, f, ensure_ascii=False, indent=2)
-        logger.info("结果已保存到: video_result.json")
+
+    ocr.process_video(video_path, frame_interval)
+    print("\n视频处理完成")
 
 
 def process_batch(ocr: OCRSystem, config: Config):
     """批量处理"""
     image_paths = config.batch_paths
-    
+
     if not image_paths:
         logger.error("批量处理模式下，batch_paths 不能为空")
-        logger.info("请在配置文件中设置 input.batch_paths")
         return
-    
+
     logger.info(f"批量处理 {len(image_paths)} 张图片")
-    
-    # 执行OCR
-    results = ocr.batch_process(image_paths)
-    
-    # 打印摘要
-    print("\n" + "=" * 60)
-    print("批量处理完成:")
-    print("=" * 60)
-    for i, result in enumerate(results, 1):
-        print(f"图片 {i} ({image_paths[i-1]}): {len(result.results)} 个文字")
-    print("=" * 60)
-    
-    # 保存结果
-    if config.save_result:
-        import json
-        output_data = {
-            'total_images': len(results),
-            'images': [r.to_dict() for r in results]
-        }
-        with open('batch_result.json', 'w', encoding='utf-8') as f:
-            json.dump(output_data, f, ensure_ascii=False, indent=2)
-        logger.info("结果已保存到: batch_result.json")
+    ocr.batch_process(image_paths)
+    print("\n批量处理完成")
 
 
 def process_stream(ocr: OCRSystem, config: Config):
@@ -278,53 +178,38 @@ def process_stream(ocr: OCRSystem, config: Config):
     max_frames = config.max_frames
     frame_interval = config.stream_frame_interval
 
-    # 尝试将stream_source转换为整数（摄像头索引）
     try:
         stream_source = int(stream_source)
         logger.info(f"处理摄像头: {stream_source}")
     except (ValueError, TypeError):
         logger.info(f"处理数据流: {stream_source}")
 
-    logger.info(f"帧间隔: {frame_interval}")
-    logger.info(f"最大处理帧数: {max_frames if max_frames else '无限制'}")
+    logger.info(f"帧间隔: {frame_interval}, 最大帧数: {max_frames or '无限制'}")
+    print("\n数据流处理中... (按 Ctrl+C 停止)\n")
 
-    # 执行OCR
+    matcher = StationMatcher(config.stations_file)
+    last_text = ""
     frame_count = 0
-    total_texts = 0
-
-    print("\n" + "=" * 60)
-    print("数据流处理中... (按 Ctrl+C 停止)")
-    print(f"帧间隔: 每 {frame_interval} 帧处理一次")
-    print("=" * 60)
 
     try:
         for result in ocr.process_stream(stream_source, max_frames, frame_interval):
             frame_count += 1
-            text_count = len(result.results)
-            total_texts += text_count
 
-            # 打印当前帧结果
-            print(f"\n帧 {frame_count}: 识别到 {text_count} 个文字")
-            for r in result.results:
-                print(f"  - {r.text} (置信度: {r.confidence:.2f})")
+            # 过滤英文，按 x 排序，拼接中文
+            chinese = [r for r in result.results if is_chinese(r.text)]
+            chinese.sort(key=lambda r: r.bbox.x)
+            combined = "".join(r.text for r in chinese)
 
-            # 保存结果（可选）
-            if config.save_result and text_count > 0:
-                import json
-                output_file = f"stream_frame_{frame_count}.json"
-                with open(output_file, 'w', encoding='utf-8') as f:
-                    json.dump(result.to_dict(), f, ensure_ascii=False, indent=2)
+            # 站点匹配
+            matched = matcher.match(combined)
+            if matched and matched != last_text:
+                last_text = matched
+                logger.info(f"检测到变化: {matched} (帧 {frame_count})")
 
     except KeyboardInterrupt:
         logger.info("\n数据流处理被用户中断")
 
-    # 打印摘要
-    print("\n" + "=" * 60)
-    print("数据流处理完成:")
-    print("=" * 60)
-    print(f"处理帧数: {frame_count}")
-    print(f"识别文字总数: {total_texts}")
-    print("=" * 60)
+    print(f"\n处理完成: 共 {frame_count} 帧")
 
 
 if __name__ == '__main__':

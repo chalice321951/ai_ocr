@@ -39,9 +39,6 @@ class OutputManager:
         self.session_dir = os.path.join(self.res_dir, session_name)
         os.makedirs(self.session_dir, exist_ok=True)
 
-        roi_crop_dir = os.path.join(self.session_dir, "roi_crop")
-        os.makedirs(roi_crop_dir, exist_ok=True)
-
         logger.info(f"输出目录: {self.session_dir}")
         return self.session_dir
 

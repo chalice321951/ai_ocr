@@ -170,6 +170,10 @@ class StreamProcessor:
 
         cap = cv2.VideoCapture(stream_source)
 
+        # 设置超时，避免 RTMP 流读取卡死
+        cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 10000)
+        cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, 10000)
+
         if not cap.isOpened():
             logger.error(f"无法打开数据流: {stream_source}")
             raise FileLoadError(str(stream_source), "无法打开数据流")

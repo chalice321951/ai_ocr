@@ -62,6 +62,42 @@ class TextRecognizer:
             logger.error(f"文本识别器初始化失败: {str(e)}")
             raise ModelLoadError("TextRecognizer", str(e))
     
+    def recognize_full(self, image: np.ndarray) -> List[RecognitionResult]:
+        """
+        对整张图像直接做 OCR（检测+识别），不做预切割。
+
+        参数:
+            image: 图像 (H, W, C)，BGR格式
+
+        返回:
+            List[RecognitionResult]: 识别结果列表
+        """
+        try:
+            result = self.ocr.ocr(image, det=True, rec=True)
+            if not result or not result[0]:
+                return []
+
+            results = []
+            for line in result[0]:
+                box_points, (text, confidence) = line
+                # box_points 是四个角点 [[x1,y1],[x2,y2],[x3,y3],[x4,y4]]
+                xs = [int(p[0]) for p in box_points]
+                ys = [int(p[1]) for p in box_points]
+                bbox = BoundingBox(
+                    x=min(xs), y=min(ys),
+                    width=max(xs) - min(xs),
+                    height=max(ys) - min(ys),
+                    confidence=confidence
+                )
+                results.append(RecognitionResult(text=text, confidence=confidence, bbox=bbox))
+
+            logger.info(f"整图识别: {len(results)} 个文字区域")
+            return results
+
+        except Exception as e:
+            logger.error(f"整图识别失败: {e}")
+            return []
+
     def recognize(
         self, 
         image: np.ndarray, 

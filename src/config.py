@@ -47,8 +47,11 @@ class Config:
         self.roi_min_area = 1000
         self.roi_dilate_kernel_size = 5
         self.roi_padding = 10
-        self.roi_tracker_type = "CSRT"
-        self.roi_redetect_interval = 30
+        self.roi_min_width_ratio = 0.3
+        self.roi_max_height_ratio = 0.3
+
+        # 站点匹配配置
+        self.stations_file = "config/stations.json"
 
         # 输出配置
         self.save_result = True
@@ -140,11 +143,14 @@ class Config:
                 self.roi_min_area = cd.get('min_area', self.roi_min_area)
                 self.roi_dilate_kernel_size = cd.get('dilate_kernel_size', self.roi_dilate_kernel_size)
                 self.roi_padding = cd.get('padding', self.roi_padding)
-            if 'tracker' in roi_config:
-                tr = roi_config['tracker']
-                self.roi_tracker_type = tr.get('type', self.roi_tracker_type)
-                self.roi_redetect_interval = tr.get('redetect_interval', self.roi_redetect_interval)
-        
+                self.roi_min_width_ratio = cd.get('min_width_ratio', self.roi_min_width_ratio)
+                self.roi_max_height_ratio = cd.get('max_height_ratio', self.roi_max_height_ratio)
+
+        # 加载站点匹配配置
+        if 'station_match' in config_data:
+            sm_config = config_data['station_match']
+            self.stations_file = sm_config.get('stations_file', self.stations_file)
+
         # 验证配置
         self._validate()
     
@@ -234,7 +240,5 @@ class Config:
             'roi_enabled': self.roi_enabled,
             'roi_hsv_lower': self.roi_hsv_lower,
             'roi_hsv_upper': self.roi_hsv_upper,
-            'roi_tracker_type': self.roi_tracker_type,
-            'roi_redetect_interval': self.roi_redetect_interval,
             'save_roi_crop': self.save_roi_crop,
         }

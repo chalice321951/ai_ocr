@@ -32,7 +32,7 @@ performance:
 
 # 输入配置
 input:
-  mode: "image"  # 模式: image(单张图片), video(视频), batch(批量处理), stream(数据流)
+  mode: "stream"  # 模式: image(单张图片), video(视频), batch(批量处理), stream(数据流)
   
   # 单张图片模式配置
   image_path: "test_image.jpg"  # 图片路径
@@ -48,7 +48,7 @@ input:
     - "image3.jpg"
   
   # 数据流模式配置
-  stream_source: "0"  # 数据流源
+  stream_source: "rtmp://39.106.224.108:1937/live100/stream100"  # 数据流源
   # 可选值：
   #   - "0" 或 0 = 摄像头0（默认摄像头）
   #   - "1" 或 1 = 摄像头1
@@ -65,17 +65,17 @@ output:
 
 # ==================== ROI 检测配置 ====================
 roi:
-  enabled: false  # 是否启用 ROI 模式
+  enabled: true  # 是否启用 ROI 模式
 
   # 颜色检测参数
   color_detect:
-    hsv_lower: [0, 120, 100]  # HSV 下限 [H, S, V]
-    hsv_upper: [10, 255, 255]  # HSV 上限 [H, S, V]
+    hsv_lower: [0, 100, 80]  # HSV 下限 [H, S, V]
+    hsv_upper: [15, 255, 255]  # HSV 上限 [H, S, V]
     min_area: 1000  # 最小轮廓面积
     dilate_kernel_size: 5  # 膨胀核大小
     padding: 10  # ROI 外扩像素
+    max_height_ratio: 0.15  # 高度占画面最大比例（只取窄条）
 
-  # 跟踪器参数
-  tracker:
-    type: "MIL"  # 跟踪器类型: MIL（内置，无需模型文件）
-    redetect_interval: 30  # 每 N 帧重新颜色检测
+# ==================== 站点匹配配置 ====================
+station_match:
+  stations_file: "config/stations.json"  # 站点列表文件路径
