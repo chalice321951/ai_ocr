@@ -3,6 +3,8 @@
 """
 import logging
 import os
+from logging.handlers import TimedRotatingFileHandler
+from datetime import datetime
 from typing import Optional
 
 
@@ -51,7 +53,15 @@ def setup_logger(
         if log_dir:
             os.makedirs(log_dir, exist_ok=True)
 
-        file_handler = logging.FileHandler(log_file, encoding='utf-8')
+        # 按天轮转日志文件，保留30天
+        file_handler = TimedRotatingFileHandler(
+            log_file,
+            when='midnight',
+            interval=1,
+            backupCount=30,
+            encoding='utf-8'
+        )
+        file_handler.suffix = '%Y-%m-%d'
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(logging.Formatter(
             '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
