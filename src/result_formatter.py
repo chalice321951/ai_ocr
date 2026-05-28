@@ -74,29 +74,7 @@ def get_chinese_font(font_size: int = 20) -> ImageFont.FreeTypeFont:
 
 class ResultFormatter:
     """结果格式化器"""
-    
-    @staticmethod
-    def to_json(results: List[RecognitionResult], pretty: bool = True) -> str:
-        """
-        转换为JSON格式
-        
-        参数:
-            results: 识别结果列表
-            pretty: 是否格式化输出
-            
-        返回:
-            str: JSON字符串
-        """
-        data = {
-            'total_count': len(results),
-            'results': [r.to_dict() for r in results]
-        }
-        
-        if pretty:
-            return json.dumps(data, ensure_ascii=False, indent=2)
-        else:
-            return json.dumps(data, ensure_ascii=False)
-    
+
     @staticmethod
     def to_xml(results: List[RecognitionResult]) -> str:
         """

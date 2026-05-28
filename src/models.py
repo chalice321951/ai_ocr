@@ -31,20 +31,6 @@ class BoundingBox:
             'height': self.height,
             'confidence': self.confidence
         }
-    
-    def get_corners(self) -> List[tuple]:
-        """
-        获取边界框的四个角点坐标
-        
-        返回:
-            List[tuple]: [(x1,y1), (x2,y2), (x3,y3), (x4,y4)]
-        """
-        return [
-            (self.x, self.y),  # 左上
-            (self.x + self.width, self.y),  # 右上
-            (self.x + self.width, self.y + self.height),  # 右下
-            (self.x, self.y + self.height)  # 左下
-        ]
 
 
 @dataclass
@@ -94,23 +80,11 @@ class OCRResult:
     def get_all_texts(self) -> List[str]:
         """
         获取所有识别的文字
-        
+
         返回:
             List[str]: 文字列表
         """
         return [r.text for r in self.results]
-    
-    def filter_by_confidence(self, threshold: float) -> List[RecognitionResult]:
-        """
-        根据置信度过滤结果
-        
-        参数:
-            threshold: 置信度阈值
-            
-        返回:
-            List[RecognitionResult]: 过滤后的结果列表
-        """
-        return [r for r in self.results if r.confidence >= threshold]
 
 
 @dataclass

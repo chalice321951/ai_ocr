@@ -6,7 +6,6 @@ import json
 import cv2
 import numpy as np
 from datetime import datetime
-from typing import Optional
 
 from .logger import get_logger
 
@@ -71,25 +70,3 @@ class OutputManager:
 
         with open(path, "w", encoding="utf-8") as f:
             json.dump(existing, f, ensure_ascii=False, indent=2)
-
-    def rename_session(self, new_detect_type: str):
-        """重命名当前 session 文件夹（如加入检测文本）"""
-        if self.session_dir is None:
-            return
-        parent = os.path.dirname(self.session_dir)
-        old_name = os.path.basename(self.session_dir)
-        # 替换最后的 detect_type 部分
-        parts = old_name.split("_", 1)
-        ts = parts[0] if len(parts) > 1 else old_name
-        safe_name = new_detect_type.replace("：", "_").replace(":", "_").replace(" ", "_")
-        new_name = f"{ts}_{safe_name}"
-        new_path = os.path.join(parent, new_name)
-        if new_path != self.session_dir and not os.path.exists(new_path):
-            os.rename(self.session_dir, new_path)
-            self.session_dir = new_path
-            logger.info(f"输出目录: {self.session_dir}")
-
-    def get_log_path(self) -> str:
-        """获取当日日志文件路径"""
-        date_str = datetime.now().strftime("%Y-%m-%d")
-        return os.path.join(self.log_dir, f"{date_str}.log")
