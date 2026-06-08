@@ -1,0 +1,26 @@
+# 模型转换工具依赖（PC端使用）
+# 用于将PaddleOCR模型转换为RKNN格式
+
+# 模型转换核心工具
+paddle2onnx==1.0.9
+onnx==1.14.0
+onnxruntime==1.15.0
+
+# PaddlePaddle和PaddleOCR（用于模型导出）
+paddlepaddle==2.6.2
+paddleocr==2.10.0
+
+# RKNN-Toolkit2（仅Linux，需手动安装whl包）
+# rknn-toolkit2>=1.6.0  # 从GitHub下载安装
+
+# 辅助工具
+numpy>=1.21.0
+opencv-python>=4.5.0
+Pillow>=9.0.0
+PyYAML>=6.0
+
+# 可选：模型可视化
+netron>=7.0.0
+
+# 开发工具
+pytest>=7.4.0
